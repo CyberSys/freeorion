@@ -12,7 +12,7 @@
 #include "../util/Directories.h"
 
 #include <boost/xpressive/xpressive.hpp>
-#include <boost/algorithm/string/replace.hpp>
+#include <boost/algorithm/string.hpp>
 #include <boost/filesystem/operations.hpp>
 #include <boost/filesystem/fstream.hpp>
 #include <boost/spirit/include/phoenix.hpp>
@@ -194,6 +194,37 @@ namespace parse {
         replace_macro_references(text, macros);
 
         //DebugLogger() << "after macro substitution text: " << text;
+    }
+
+    const sregex CAPITALIZATION = "[[" >> *space >> "CAPITALIZE(" >> (s1 = MACRO_TEXT) >> ")]]";
+
+    void capitalization_substitution(std::string& text) {
+        try {
+            std::string::iterator text_it = text.begin();
+            while (true) {
+                // find next macro definition
+                smatch match;
+                if (!regex_search(text_it, text.end(), match, CAPITALIZATION, regex_constants::match_default))
+                    break;
+
+                //const std::string& matched_text = match.str();  // [[CAPITALIZE(Some miXEd-CaSe TexT)]]
+                //DebugLogger() << "found capitalize substitution: " << matched_text;
+
+                // get macro key and macro text from match
+                std::string match_text = match[1];
+                //DebugLogger() << "raw text: " << match_text;
+                boost::algorithm::to_upper(match_text);
+
+                // replace capitalization macro with the capitalized contained text
+                text.replace(text_it + match.position(), text_it + match.position() + match.length(), match_text);
+                // subsequent scanning starts after macro defininition
+                text_it = text.end() - match.suffix().length();
+            }
+        } catch (const std::exception& e) {
+            ErrorLogger() << "Exception caught regex parsing script file: " << e.what();
+            std::cerr << "Exception caught regex parsing script file: " << e.what() << std::endl;
+            return;
+        }
     }
 
     bool read_file(const boost::filesystem::path& path, std::string& file_contents) {
@@ -545,6 +576,7 @@ namespace parse {
             file_contents += "\n";
 
             file_substitution(file_contents, path.parent_path());
+            capitalization_substitution(file_contents);
             macro_substitution(file_contents);
 
             first = file_contents.begin();
